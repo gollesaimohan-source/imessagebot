@@ -1,7 +1,12 @@
-# Production Dockerfile - Multi-service build
-# This Dockerfile is for production deployments
-# For local development, use: docker-compose up
+# Production Dockerfile - Use docker-compose for local development
+# For production deployments, build images separately:
+#   docker build -t imessagebot-backend:latest -f backend/Dockerfile .
+#   docker build -t imessagebot-frontend:latest -f frontend/Dockerfile .
 
+# This file is an example for single-image production deployment
+# It's recommended to use docker-compose or separate container orchestration
+
+# Stage 1: Backend builder
 FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
@@ -11,7 +16,7 @@ RUN npm install --production
 
 COPY backend/src ./src
 
-# Stage 2: Frontend build
+# Stage 2: Frontend builder
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
@@ -22,25 +27,36 @@ RUN npm install
 COPY frontend/ .
 RUN npm run build
 
-# Stage 3: Production runtime
-FROM nginx:alpine
+# Stage 3: Frontend runtime (nginx)
+FROM nginx:alpine AS frontend-runtime
 
-# Install Node.js in nginx image for backend
-RUN apk add --no-cache nodejs npm
+WORKDIR /app
 
-# Copy nginx config
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Copy backend code
-COPY --from=backend-builder /app/backend /app/backend
+EXPOSE 80
 
-WORKDIR /app/backend
+# Stage 4: Backend runtime with frontend
+FROM node:20-alpine
 
-# Expose both ports
-EXPOSE 80 5000
+RUN apk add --no-cache dumb-init
 
-# Start both services
-CMD ["sh", "-c", "node src/index.js & nginx -g 'daemon off;'"]
+WORKDIR /app
+
+# Copy backend
+COPY --from=backend-builder /app/backend .
+
+# Copy frontend public files to serve static content
+COPY --from=frontend-builder /app/frontend/dist ./public
+
+# Install production dependencies only
+RUN npm install --production
+
+EXPOSE 5000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["/usr/sbin/dumb-init", "--"]
+
+# Start backend (frontend should be served separately)
+CMD ["node", "src/index.js"]
