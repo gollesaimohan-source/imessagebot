@@ -5,6 +5,7 @@ import "dotenv/config";
 import {clerkMiddleware} from "@clerk/express";
 import fs from "fs";
 import path from "path";
+import job from "./cron.js";
 
 
 
@@ -45,5 +46,7 @@ app.listen(PORT, () => {
     connectDB();
     console.log('Server is running on port 4567',PORT);
 
-    if (process.env.NODE_ENV === "production") job.start();
+    if (process.env.NODE_ENV === "production") {
+        job.start();
+    }
 });
